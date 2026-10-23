@@ -8,10 +8,15 @@ import SeverityChart from "./SeverityChart";
 import ResultsTable from "./ResultsTable";
 import DetailDrawer from "./DetailDrawer";
 import Filters, { EMPTY_FILTERS, type FilterState } from "./Filters";
+import ScanForm, { type ScanRequest } from "./ScanForm";
 
-type Source = { kind: "api" } | { kind: "sample" } | { kind: "upload"; name: string };
+type Source = { kind: "api" } | { kind: "sample" } | { kind: "upload"; name: string } | { kind: "scan" };
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 } as const;
+
+function resultKey(r: NormalizedResult): string {
+  return r.tested_url ?? r.host;
+}
 
 export default function Dashboard() {
   const [scan, setScan] = useState<NormalizedScan | null>(null);
@@ -19,6 +24,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [selected, setSelected] = useState<NormalizedResult | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (url: string, next: Source) => {
@@ -49,6 +56,32 @@ export default function Dashboard() {
     }
   };
 
+  const onScan = async (req: ScanRequest) => {
+    setScanning(true);
+    setScanError(null);
+    try {
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-scan-token": req.token },
+        body: JSON.stringify({ url: req.url, sapi: req.sapi, insecure: req.insecure }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error ?? `scan failed: HTTP ${res.status}`);
+      const fresh = normalizeResults(payload).results;
+      setScan((prev) => {
+        const keys = new Set(fresh.map(resultKey));
+        const kept = (prev?.results ?? []).filter((r) => !keys.has(resultKey(r)));
+        return { scanTime: new Date().toISOString(), results: [...fresh, ...kept] };
+      });
+      setSource({ kind: "scan" });
+      setSelected(fresh[0] ?? null);
+    } catch (e) {
+      setScanError((e as Error).message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const results = useMemo(() => scan?.results ?? [], [scan]);
   const summary = useMemo(() => summarize(results), [results]);
   const verdicts = useMemo(
@@ -74,7 +107,13 @@ export default function Dashboard() {
   }, [results, filters]);
 
   const sourceLabel =
-    source.kind === "upload" ? `Uploaded: ${source.name}` : source.kind === "sample" ? "Sample data" : "data/scan-results.json";
+    source.kind === "upload"
+      ? `Uploaded: ${source.name}`
+      : source.kind === "sample"
+        ? "Sample data"
+        : source.kind === "scan"
+          ? "Live scan"
+          : "data/scan-results.json";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
@@ -114,6 +153,8 @@ export default function Dashboard() {
           />
         </div>
       </header>
+
+      <ScanForm onScan={onScan} busy={scanning} error={scanError} />
 
       {error && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
