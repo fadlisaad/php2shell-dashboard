@@ -60,7 +60,8 @@ export default function Dashboard() {
     setScanning(true);
     setScanError(null);
     try {
-      const res = await fetch("/api/scan", {
+      const base = process.env.NEXT_PUBLIC_SCAN_API_URL ?? "";
+      const res = await fetch(`${base}/api/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-scan-token": req.token },
         body: JSON.stringify({ url: req.url, sapi: req.sapi, insecure: req.insecure }),

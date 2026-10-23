@@ -59,3 +59,34 @@ public/sample-results.json   sample covering every verdict
 - **Netlify / Azure Static Web Apps:** both support Next.js App Router natively.
 
 > Scan output contains hostnames and response excerpts. Don't deploy real results to a public URL without access control.
+
+## Live scan (iteration 1)
+
+The dashboard can run the real scanner against a single URL you type in. Because the
+scanner is Python and Vercel's Next.js builder does not build top-level `/api/*.py`
+functions, the scanner runs as its **own Vercel project** in [`scanner-api/`](scanner-api/).
+
+- `scanner-api/api/scan.py` - token-gated endpoint, returns the same shape as `save_results()`
+- `scanner-api/api/_scanner.py` - vendored copy of the upstream `scanner.py`
+- `scanner-api/pyproject.toml` - sets `[tool.vercel] entrypoint = "api.scan:handler"` (required)
+
+### Environment variables
+
+| Project | Variable | Purpose |
+| --- | --- | --- |
+| scanner-api | `SCAN_TOKEN` | required; callers must send it as the `x-scan-token` header |
+| scanner-api | `ALLOWED_ORIGIN` | CORS origin allowed to call the endpoint (the dashboard URL) |
+| dashboard | `NEXT_PUBLIC_SCAN_API_URL` | base URL of the scanner-api deployment |
+
+Without `SCAN_TOKEN` set, the endpoint returns 503 and scanning is disabled.
+Rotate the token by updating `SCAN_TOKEN` and redeploying `scanner-api`.
+
+### Deploying the scanner API
+
+```bash
+cd scanner-api
+vercel deploy --prod
+```
+
+> The scanner sends large multipart probes to whatever URL is submitted. Only scan
+> hosts you are authorized to test, and keep the scan token private.

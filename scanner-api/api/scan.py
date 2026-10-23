@@ -11,11 +11,15 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler
 
-from _scanner import check_vulnerability, utc_now, parse_headers
+try:
+    from _scanner import check_vulnerability, utc_now, parse_headers
+except ImportError:
+    from api._scanner import check_vulnerability, utc_now, parse_headers
 
 MAX_TIMEOUT = 45
 DEFAULT_TIMEOUT = 20
 ALLOWED_SAPI = {"auto", "mod_php", "fpm"}
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 
 
 class handler(BaseHTTPRequestHandler):
@@ -24,8 +28,20 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self._cors()
         self.end_headers()
         self.wfile.write(body)
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+        self.send_header("Access-Control-Allow-Headers", "content-type, x-scan-token")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Max-Age", "86400")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
 
     def do_GET(self):
         self._send(405, {"error": "use POST to start a scan"})
