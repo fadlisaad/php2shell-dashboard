@@ -1,0 +1,153 @@
+{
+  "scan_time": "2026-10-23T07:58:11Z",
+  "total_results": 8,
+  "results": [
+    {
+      "host": "https://vuln-shop.example.com",
+      "vulnerable": true,
+      "verdict": "VULNERABLE",
+      "status_code": 500,
+      "error": null,
+      "reason": "PHP memory-exhaustion fatal error observed on 20 MiB probe (mod_php)",
+      "sapi": "mod_php",
+      "powered_by": "PHP/8.3.12",
+      "request": "POST /index.php HTTP/1.1\r\nHost: vuln-shop.example.com\r\nContent-Type: multipart/form-data; boundary=----probe\r\nContent-Length: 20971520\r\n\r\n<memory-exhaustion probe; 20971520 bytes>",
+      "response": "HTTP/1.1 500 Internal Server Error\r\nServer: Apache\r\nX-Powered-By: PHP/8.3.12\r\nContent-Length: 0\r\n\r\nPHP Fatal error:  Allowed memory size of 134217728 bytes exhausted",
+      "final_url": "https://vuln-shop.example.com/index.php",
+      "tested_url": "https://vuln-shop.example.com/index.php",
+      "control": { "status_code": 200, "response_bytes": 10240, "bytes_sent": 42, "error": null, "description": "HTTP 200, 10240 byte response (sent 42 bytes)" },
+      "probes": [
+        { "status_code": 200, "response_bytes": 10240, "bytes_sent": 1048576, "error": null, "description": "HTTP 200, 10240 byte response (sent 1048576 bytes)" },
+        { "status_code": 500, "response_bytes": 0, "bytes_sent": 20971520, "error": null, "description": "HTTP 500, 0 byte response (sent 20971520 bytes)" }
+      ],
+      "timestamp": "2026-10-23T07:58:01Z"
+    },
+    {
+      "host": "https://fpm-api.example.net",
+      "vulnerable": true,
+      "verdict": "VULNERABLE",
+      "status_code": 502,
+      "error": null,
+      "reason": "PHP-FPM worker failure differential on 10 MiB probe (PHP-FPM)",
+      "sapi": "PHP-FPM",
+      "powered_by": "PHP/8.4.10",
+      "request": "POST /api/index.php HTTP/1.1\r\nHost: fpm-api.example.net\r\nContent-Length: 10485760\r\n\r\n<worker-failure probe; 10485760 bytes>",
+      "response": "HTTP/1.1 502 Bad Gateway\r\nServer: nginx\r\nContent-Length: 0\r\n\r\n",
+      "final_url": "https://fpm-api.example.net/api/index.php",
+      "tested_url": "https://fpm-api.example.net/api/index.php",
+      "control": { "status_code": 200, "response_bytes": 2048, "bytes_sent": 42, "error": null, "description": "HTTP 200, 2048 byte response (sent 42 bytes)" },
+      "probes": [
+        { "status_code": 502, "response_bytes": 0, "bytes_sent": 10485760, "error": null, "description": "HTTP 502, 0 byte response (sent 10485760 bytes)" }
+      ],
+      "timestamp": "2026-10-23T07:58:03Z"
+    },
+    {
+      "host": "https://unknown-version.example.org",
+      "vulnerable": null,
+      "verdict": "INCONCLUSIVE",
+      "status_code": 500,
+      "error": "empty HTTP 500 but PHP version not advertised; cannot distinguish safe OOM",
+      "reason": "empty HTTP 500 but PHP version not advertised; cannot distinguish safe OOM",
+      "sapi": null,
+      "powered_by": null,
+      "request": "POST /index.php HTTP/1.1\r\nHost: unknown-version.example.org\r\nContent-Length: 20971520\r\n\r\n<probe; 20971520 bytes>",
+      "response": "HTTP/1.1 500 Internal Server Error\r\nServer: Apache\r\nContent-Length: 0\r\n\r\n",
+      "final_url": "https://unknown-version.example.org/index.php",
+      "tested_url": "https://unknown-version.example.org/index.php",
+      "control": { "status_code": 200, "response_bytes": 5120, "bytes_sent": 42, "error": null, "description": "HTTP 200, 5120 byte response (sent 42 bytes)" },
+      "probes": [
+        { "status_code": 500, "response_bytes": 0, "bytes_sent": 20971520, "error": null, "description": "HTTP 500, 0 byte response (sent 20971520 bytes)" }
+      ],
+      "timestamp": "2026-10-23T07:58:05Z"
+    },
+    {
+      "host": "https://pma.example.com",
+      "vulnerable": null,
+      "verdict": "INCONCLUSIVE",
+      "status_code": 403,
+      "error": "phpMyAdmin control request returned HTTP 403",
+      "reason": "phpMyAdmin control request returned HTTP 403",
+      "sapi": null,
+      "powered_by": "PHP/7.4.33",
+      "request": "POST /show_config_errors.php HTTP/1.1\r\nHost: pma.example.com\r\nContent-Length: 42\r\n\r\n<control; 42 bytes>",
+      "response": "HTTP/1.1 403 Forbidden\r\nServer: Apache\r\nX-Powered-By: PHP/7.4.33\r\n\r\nForbidden",
+      "final_url": "https://pma.example.com/show_config_errors.php",
+      "tested_url": "https://pma.example.com/index.php",
+      "control": { "status_code": 403, "response_bytes": 120, "bytes_sent": 42, "error": null, "description": "HTTP 403, 120 byte response (sent 42 bytes)" },
+      "probes": [],
+      "timestamp": "2026-10-23T07:58:06Z"
+    },
+    {
+      "host": "https://patched.example.com",
+      "vulnerable": false,
+      "verdict": "FIXED",
+      "status_code": 200,
+      "error": null,
+      "reason": "advertised version is patched: PHP/8.3.25",
+      "sapi": null,
+      "powered_by": "PHP/8.3.25",
+      "request": "POST /index.php HTTP/1.1\r\nHost: patched.example.com\r\nContent-Length: 1048576\r\n\r\n<probe; 1048576 bytes>",
+      "response": "HTTP/1.1 200 OK\r\nServer: Apache\r\nX-Powered-By: PHP/8.3.25\r\nContent-Length: 8192\r\n\r\n<!doctype html>",
+      "final_url": "https://patched.example.com/index.php",
+      "tested_url": "https://patched.example.com/index.php",
+      "control": { "status_code": 200, "response_bytes": 8192, "bytes_sent": 42, "error": null, "description": "HTTP 200, 8192 byte response (sent 42 bytes)" },
+      "probes": [
+        { "status_code": 200, "response_bytes": 8192, "bytes_sent": 1048576, "error": null, "description": "HTTP 200, 8192 byte response (sent 1048576 bytes)" }
+      ],
+      "timestamp": "2026-10-23T07:58:07Z"
+    },
+    {
+      "host": "https://also-patched.example.io",
+      "vulnerable": false,
+      "verdict": "FIXED",
+      "status_code": 200,
+      "error": null,
+      "reason": "advertised version is patched: PHP/8.4.27",
+      "sapi": null,
+      "powered_by": "PHP/8.4.27",
+      "request": "POST /index.php HTTP/1.1\r\nHost: also-patched.example.io\r\nContent-Length: 1048576\r\n\r\n<probe; 1048576 bytes>",
+      "response": "HTTP/1.1 200 OK\r\nServer: nginx\r\nX-Powered-By: PHP/8.4.27\r\n\r\n<!doctype html>",
+      "final_url": "https://also-patched.example.io/index.php",
+      "tested_url": "https://also-patched.example.io/index.php",
+      "control": { "status_code": 200, "response_bytes": 4096, "bytes_sent": 42, "error": null, "description": "HTTP 200, 4096 byte response (sent 42 bytes)" },
+      "probes": [],
+      "timestamp": "2026-10-23T07:58:08Z"
+    },
+    {
+      "host": "https://quiet.example.com",
+      "vulnerable": false,
+      "verdict": "NO SIGNAL",
+      "status_code": 200,
+      "error": null,
+      "reason": "no crash observed and no PHP version advertised",
+      "sapi": null,
+      "powered_by": null,
+      "request": "POST /index.php HTTP/1.1\r\nHost: quiet.example.com\r\nContent-Length: 20971520\r\n\r\n<probe; 20971520 bytes>",
+      "response": "HTTP/1.1 200 OK\r\nServer: cloudflare\r\n\r\nOK",
+      "final_url": "https://quiet.example.com/index.php",
+      "tested_url": "https://quiet.example.com/index.php",
+      "control": { "status_code": 200, "response_bytes": 1024, "bytes_sent": 42, "error": null, "description": "HTTP 200, 1024 byte response (sent 42 bytes)" },
+      "probes": [
+        { "status_code": 200, "response_bytes": 1024, "bytes_sent": 20971520, "error": null, "description": "HTTP 200, 1024 byte response (sent 20971520 bytes)" }
+      ],
+      "timestamp": "2026-10-23T07:58:09Z"
+    },
+    {
+      "host": "https://timeout.example.com",
+      "vulnerable": null,
+      "verdict": "ERROR",
+      "status_code": null,
+      "error": "control request failed: connection timed out",
+      "reason": "control request failed: connection timed out",
+      "sapi": null,
+      "powered_by": null,
+      "request": null,
+      "response": null,
+      "final_url": null,
+      "tested_url": "https://timeout.example.com/index.php",
+      "control": null,
+      "probes": [],
+      "timestamp": "2026-10-23T07:58:10Z"
+    }
+  ]
+}
