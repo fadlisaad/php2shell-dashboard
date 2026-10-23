@@ -6,7 +6,10 @@ export interface ScanRequest {
   token: string;
   sapi: string;
   insecure: boolean;
+  maxMib: number;
 }
+
+const MAX_MIB_OPTIONS = [0.5, 1, 2, 4, 8];
 
 const inputCls =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-slate-500 focus:outline-none";
@@ -24,11 +27,12 @@ export default function ScanForm({
   const [token, setToken] = useState("");
   const [sapi, setSapi] = useState("auto");
   const [insecure, setInsecure] = useState(false);
+  const [maxMib, setMaxMib] = useState(2);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim() || !token || busy) return;
-    onScan({ url: url.trim(), token, sapi, insecure });
+    onScan({ url: url.trim(), token, sapi, insecure, maxMib });
   };
 
   return (
@@ -36,7 +40,9 @@ export default function ScanForm({
       <h2 className="text-sm font-semibold text-slate-700">Scan a URL</h2>
       <p className="mt-1 text-xs text-slate-500">
         Runs the live scanner against one target. Requires the scan token. The target receives large
-        multipart probes — only scan hosts you are authorized to test.
+        multipart probes — only scan hosts you are authorized to test. Probes escalate as a
+        {" "}0.5 / 1 / 2 MiB ladder by default; raise the ceiling only for an authorized, permissive
+        target (most production sites cap bodies at 2–4 MiB).
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="flex min-w-[18rem] flex-1 flex-col gap-1">
@@ -69,6 +75,20 @@ export default function ScanForm({
             <option value="auto">auto</option>
             <option value="mod_php">mod_php</option>
             <option value="fpm">fpm</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Max probe size</span>
+          <select
+            value={maxMib}
+            onChange={(e) => setMaxMib(Number(e.target.value))}
+            className={inputCls}
+          >
+            {MAX_MIB_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m} MiB{m === 2 ? " (default)" : ""}
+              </option>
+            ))}
           </select>
         </label>
         <label className="mb-2 flex items-center gap-2 text-xs text-slate-600">

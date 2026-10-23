@@ -64,7 +64,7 @@ export default function Dashboard() {
       const res = await fetch(`${base}/api/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-scan-token": req.token },
-        body: JSON.stringify({ url: req.url, sapi: req.sapi, insecure: req.insecure }),
+        body: JSON.stringify({ url: req.url, sapi: req.sapi, insecure: req.insecure, max_mib: req.maxMib }),
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error ?? `scan failed: HTTP ${res.status}`);

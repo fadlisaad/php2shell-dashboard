@@ -12,9 +12,9 @@ import os
 from http.server import BaseHTTPRequestHandler
 
 try:
-    from _scanner import check_vulnerability, utc_now, parse_headers
+    from _scanner import check_vulnerability, utc_now, parse_headers, MIN_PROBE_BYTES, MAX_PROBE_BYTES, DEFAULT_MAX_PROBE_BYTES
 except ImportError:
-    from api._scanner import check_vulnerability, utc_now, parse_headers
+    from api._scanner import check_vulnerability, utc_now, parse_headers, MIN_PROBE_BYTES, MAX_PROBE_BYTES, DEFAULT_MAX_PROBE_BYTES
 
 MAX_TIMEOUT = 45
 DEFAULT_TIMEOUT = 20
@@ -85,6 +85,16 @@ class handler(BaseHTTPRequestHandler):
             timeout = DEFAULT_TIMEOUT
         timeout = max(1, min(timeout, MAX_TIMEOUT))
 
+        if data.get("max_mib") in (None, ""):
+            max_bytes = DEFAULT_MAX_PROBE_BYTES
+        else:
+            try:
+                max_bytes = int(float(data.get("max_mib")) * (1 << 20))
+            except (TypeError, ValueError):
+                self._send(400, {"error": "max_mib must be a number"})
+                return
+        max_bytes = max(MIN_PROBE_BYTES, min(max_bytes, MAX_PROBE_BYTES))
+
         verify_ssl = not bool(data.get("insecure"))
         custom_headers = parse_headers(data.get("headers")) if data.get("headers") else {}
 
@@ -95,6 +105,7 @@ class handler(BaseHTTPRequestHandler):
                 verify_ssl=verify_ssl,
                 custom_headers=custom_headers,
                 sapi=sapi,
+                max_bytes=max_bytes,
             )
         except Exception as exc:  # noqa: BLE001 - surface any scanner failure as JSON
             self._send(500, {"error": f"scan failed: {exc}"})

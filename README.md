@@ -90,3 +90,17 @@ vercel deploy --prod
 
 > The scanner sends large multipart probes to whatever URL is submitted. Only scan
 > hosts you are authorized to test, and keep the scan token private.
+
+### Probe payload (iteration 2)
+
+The scanner escalates a **0.5 / 1 / 2 MiB** probe ladder by default (previously 1 / 8 / 20 MiB).
+Each probe is ~87% real multipart parts (~2000 / 4000 / 8000 parts) rather than filler, so the
+memory-exhaustion pressure scales with *part count* while every probe stays under a 2 MiB ceiling —
+the range most production servers and WAFs allow (old 8/20 MiB probes were rejected before PHP ever
+parsed them). Detection logic (in-band fatal memory error, empty-body 500/200 differentials, FPM
+gateway errors) is unchanged.
+
+The ceiling is configurable per scan via the **Max probe size** control in the form, or the
+`max_mib` field in the POST body (default `2`, clamped to 0.0625–32 MiB). A body-size rejection
+(e.g. HTTP 413) is reported distinctly as "body-size limit detected". Raise the ceiling only for an
+authorized, permissive target.
