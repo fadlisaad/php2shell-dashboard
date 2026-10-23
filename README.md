@@ -104,3 +104,11 @@ The ceiling is configurable per scan via the **Max probe size** control in the f
 `max_mib` field in the POST body (default `2`, clamped to 0.0625–32 MiB). A body-size rejection
 (e.g. HTTP 413) is reported distinctly as "body-size limit detected". Raise the ceiling only for an
 authorized, permissive target.
+
+### Target resolution
+
+A bare host is scanned at its **root (`/`)**, not `/index.php` — modern PHP apps hide the front
+controller behind rewrites. The scanner **follows redirects** (301/302/303/307/308, up to 5 hops,
+loop-guarded) on the small control request to reach the real entry point, then sends the probes to
+the resolved URL. The original URL is reported as `tested_url` and the resolved one as `final_url`.
+Pass an explicit path (e.g. `https://host/app.php`) to target it directly.

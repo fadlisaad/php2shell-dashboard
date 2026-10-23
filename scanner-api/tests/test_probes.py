@@ -64,6 +64,85 @@ def test_crash_signal_unchanged():
     assert sc.crash_signal(ctrl, sc.HTTPResult(status_code=200, body=b"ok"), "auto") == (None, None)
 
 
+def test_bare_host_defaults_to_root_not_index_php():
+    assert sc.DEFAULT_PATH == "/"
+    assert sc.normalize_url("example.com") == "https://example.com/"
+    assert sc.normalize_url("https://example.com/") == "https://example.com/"
+    # an explicit path is still honored
+    assert sc.normalize_url("https://example.com/app.php") == "https://example.com/app.php"
+
+
+def test_resolve_redirect_absolute_relative_and_bad():
+    assert sc.resolve_redirect("https://a.com/", "https://b.com/x") == "https://b.com/x"
+    assert sc.resolve_redirect("https://a.com/", "/en/") == "https://a.com/en/"
+    assert sc.resolve_redirect("https://a.com/p", "sub/") == "https://a.com/sub/"
+    # non-http schemes rejected
+    assert sc.resolve_redirect("https://a.com/", "javascript:alert(1)") is None
+    assert sc.resolve_redirect("https://a.com/", "ftp://a.com/x") is None
+
+
+def test_header_value_is_case_insensitive():
+    assert sc.header_value({"Location": "/x"}, "location") == "/x"
+    assert sc.header_value({"location": "/y"}, "Location") == "/y"
+    assert sc.header_value({"X": "1"}, "location") == ""
+
+
+def test_redirect_statuses():
+    assert sc.REDIRECT_STATUSES == {301, 302, 303, 307, 308}
+
+
+def test_check_url_follows_redirect_to_final_entry_point():
+    """check_url follows a 3xx on the control request and probes the resolved URL."""
+    calls = []
+
+    def fake_send_post(target_url, body, boundary, custom_headers, timeout, verify_ssl):
+        calls.append(target_url)
+        if target_url == "https://a.test/":
+            return sc.HTTPResult(
+                status_code=302, reason="Found",
+                headers={"Location": "/app/"}, body=b"",
+            )
+        # resolved entry point: clean 200 for control and all probes
+        return sc.HTTPResult(status_code=200, reason="OK", headers={}, body=b"ok")
+
+    orig = sc.send_post
+    sc.send_post = fake_send_post
+    try:
+        result = sc.check_url(
+            "a.test", "https://a.test/", 10, True, {}, "auto",
+        )
+    finally:
+        sc.send_post = orig
+
+    assert result["tested_url"] == "https://a.test/"
+    assert result["final_url"] == "https://a.test/app/"
+    # every probe targeted the resolved URL, never the original root
+    probe_targets = [u for u in calls if u == "https://a.test/app/"]
+    assert "https://a.test/" in calls  # initial control hit the root
+    assert calls.count("https://a.test/") == 1  # only once, then redirected
+    assert len(probe_targets) >= 4  # resolved control + 3 probes
+
+
+def test_check_url_stops_on_redirect_loop():
+    def fake_send_post(target_url, body, boundary, custom_headers, timeout, verify_ssl):
+        # always bounce back to the same place -> loop guard must stop it
+        return sc.HTTPResult(
+            status_code=302, reason="Found",
+            headers={"Location": "https://loop.test/"}, body=b"",
+        )
+
+    orig = sc.send_post
+    sc.send_post = fake_send_post
+    try:
+        result = sc.check_url(
+            "loop.test", "https://loop.test/", 10, True, {}, "auto",
+        )
+    finally:
+        sc.send_post = orig
+    # resolves to the loop target once, then stops (no infinite loop)
+    assert result["final_url"] == "https://loop.test/"
+
+
 if __name__ == "__main__":
     import traceback
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import SplitResult, quote, urlsplit, urlunsplit
+from urllib.parse import SplitResult, quote, urljoin, urlsplit, urlunsplit
 
 try:
     import h11
@@ -36,7 +36,7 @@ except ImportError:
 
 
 CVES = "CVE-2026-109618 / CVE-2026-109619"
-DEFAULT_PATH = "/index.php"
+DEFAULT_PATH = "/"
 PHPMYADMIN_PATH = "/show_config_errors.php"
 PHPMYADMIN_MARKER = b"phpMyAdmin"
 CONTROL_BOUNDARY = "x"
@@ -194,6 +194,25 @@ def replace_path(target_url: str, path_value: str) -> str:
 def phpmyadmin_target(target_url: str) -> str:
     parsed = urlsplit(target_url)
     return urlunsplit((parsed.scheme, parsed.netloc, PHPMYADMIN_PATH, "", ""))
+
+
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_REDIRECTS = 5
+
+
+
+def resolve_redirect(base_url: str, location: str) -> Optional[str]:
+    """Resolve a Location header against ``base_url``; None if unusable."""
+    try:
+        resolved = urljoin(base_url, location.strip())
+    except ValueError:
+        return None
+    parsed = urlsplit(resolved)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, "")
+    )
 
 
 @lru_cache(maxsize=32)
@@ -809,6 +828,36 @@ def check_url(
         timeout,
         verify_ssl,
     )
+
+    # Follow redirects on the small control request so probes hit the real
+    # entry point (PHP apps commonly hide index.php behind rewrites/redirects).
+    visited = {target_url}
+    hops = 0
+    while (
+        not control.error
+        and control.status_code in REDIRECT_STATUSES
+        and hops < MAX_REDIRECTS
+    ):
+        location = header_value(control.headers, "location")
+        if not location:
+            break
+        next_url = resolve_redirect(target_url, location)
+        if next_url is None or next_url in visited:
+            break
+        target_url = next_url
+        visited.add(target_url)
+        hops += 1
+        control_headers = request_headers(custom_headers, CONTROL_BOUNDARY)
+        control = send_post(
+            target_url,
+            CONTROL_BODY,
+            CONTROL_BOUNDARY,
+            custom_headers,
+            timeout,
+            verify_ssl,
+        )
+
+    result["final_url"] = target_url
     result["request"] = request_dump(
         target_url,
         control_headers,
